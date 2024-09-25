@@ -206,6 +206,66 @@ app.put('/products/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// Route to place an order (only buyers can place orders)
+app.post('/orders', authenticateToken, async (req, res) => {
+    const { productId, quantity } = req.body;
+
+    // Check if the logged-in user is a buyer
+    if (req.user.role !== 'buyer') {
+        return res.status(403).json({ message: "Only buyers can place orders" });
+    }
+
+    try {
+        // Find the product by ID
+        const product = await Product.findByPk(productId);
+        if (!product) {
+            return res.status(404).json({ message: "Product not found" });
+        }
+
+        // Check if enough quantity is available
+        if (product.quantity < quantity) {
+            return res.status(400).json({ message: "Not enough product quantity available" });
+        }
+
+        // Calculate the total price
+        const totalPrice = product.price * quantity;
+
+        // Create a new order
+        const newOrder = await Order.create({
+            userId: req.user.id,  // The buyer's ID
+            productId: product.id, // The product being purchased
+            quantity,
+            totalPrice
+        });
+
+        // Reduce the product's quantity
+        product.quantity -= quantity;
+        await product.save();
+
+        res.status(201).json({ message: "Order placed successfully", order: newOrder });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error });
+    }
+});
+
+
+// Route to get all orders for the logged-in buyer
+app.get('/my-orders', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'buyer') {
+        return res.status(403).json({ message: "Only buyers can view their orders" });
+    }
+
+    try {
+        const orders = await Order.findAll({
+            where: { userId: req.user.id },
+            include: [Product]
+        });
+
+        res.status(200).json(orders);
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error });
+    }
+});
 
 
 const PORT = process.env.PORT || 5000;
