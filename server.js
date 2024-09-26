@@ -12,6 +12,10 @@ app.use(bodyParser.json());
 app.use(cors());
 dotenv.config();
 
+const path = require('path');
+
+app.use(express.static(path.join(__dirname, 'public')));
+
 // Database connection check
 const db = require('./models');
 db.sequelize.sync().then(() => {
@@ -38,6 +42,11 @@ const jwtSecret = process.env.JWT_SECRET;
 const port = process.env.PORT || 5000;
 
 // Routes
+
+app.get('/register', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'register.html')); // Make sure the path is correct
+});
+
 
 // Register Route
 app.post('/register', async (req, res) => {
