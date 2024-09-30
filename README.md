@@ -1,7 +1,6 @@
-# FARMERS HEAD
+# FARMERS PLACE
   
   
-=======
 
 
->>>>>>> 
+
