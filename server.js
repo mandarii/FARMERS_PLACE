@@ -44,15 +44,21 @@ const port = process.env.PORT || 5000;
 // Routes
 
 app.get('/register', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'register.html')); // Make sure the path is correct
+    res.sendFile(path.join(__dirname, 'public', 'register.html')); 
 });
+
+app.get('dashbord/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html')); 
+});
+
+    
+
 
 
 // Register Route
 app.post('/register', async (req, res) => {
     const { name, email, password, role } = req.body;
 
-    // Validate input
     if (!name || !email || !password || !role) {
         return res.status(400).json({ message: "Please fill all the fields" });
     }
@@ -87,13 +93,11 @@ app.post('/register', async (req, res) => {
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
-    // Validate input
     if (!email || !password) {
         return res.status(400).json({ message: "Please provide email and password" });
     }
 
     try {
-        // Find user by email
         const user = await User.findOne({ where: { email } });
         if (!user) {
             return res.status(400).json({ message: "User not found" });
@@ -108,6 +112,7 @@ app.post('/login', async (req, res) => {
         // Generate JWT token
         const token = jwt.sign({ id: user.id, role: user.role }, jwtSecret, { expiresIn: '1h' });
 
+        res.json({ token, role: user.role });
         res.status(200).json({ message: "Login successful", token });
     } catch (error) {
         res.status(500).json({ message: "Server error", error });
@@ -130,7 +135,7 @@ app.get('/profile', authenticateToken, async (req, res) => {
 });
 
 
-// Route to add a new product (only farmers can add products)
+// Route to add a new product
 app.post('/products', authenticateToken, async (req, res) => {
     const { name, description, price, quantity, category } = req.body;
 
@@ -152,7 +157,7 @@ app.post('/products', authenticateToken, async (req, res) => {
             price,
             quantity,
             category,
-            farmerId: req.user.id  // Associate the product with the logged-in farmer
+            farmerId: req.user.id 
         });
 
         res.status(201).json({ message: "Product added successfully", product: newProduct });
@@ -192,12 +197,11 @@ app.put('/products/:id', authenticateToken, async (req, res) => {
     const { name, description, price, quantity, category } = req.body;
 
     try {
-        // Find the product by ID
+        
         const product = await Product.findByPk(id);
 
-        // Check if product exists and belongs to the logged-in farmer
         if (!product || product.farmerId !== req.user.id) {
-            return res.status(403).json({ message: "You can only edit your own products" });
+            return res.status(403).json({ message: "Edit your products" });
         }
 
         // Update the product details
@@ -215,48 +219,65 @@ app.put('/products/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// Route to place an order (only buyers can place orders)
-app.post('/orders', authenticateToken, async (req, res) => {
-    const { productId, quantity } = req.body;
-
-    // Check if the logged-in user is a buyer
-    if (req.user.role !== 'buyer') {
-        return res.status(403).json({ message: "Only buyers can place orders" });
-    }
+// Route to delete a product (only for the farmer who owns it)
+app.delete('/products/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
 
     try {
-        // Find the product by ID
-        const product = await Product.findByPk(productId);
-        if (!product) {
-            return res.status(404).json({ message: "Product not found" });
+    
+        const product = await Product.findByPk(id);
+
+        // Check if product exists and belongs to the logged-in farmer
+        if (!product || product.farmerId !== req.user.id) {
+            return res.status(403).json({ message: "You can only delete your own products" });
         }
 
-        // Check if enough quantity is available
-        if (product.quantity < quantity) {
-            return res.status(400).json({ message: "Not enough product quantity available" });
-        }
+        // Delete the product
+        await product.destroy();
 
-        // Calculate the total price
-        const totalPrice = product.price * quantity;
-
-        // Create a new order
-        const newOrder = await Order.create({
-            userId: req.user.id,  // The buyer's ID
-            productId: product.id, // The product being purchased
-            quantity,
-            totalPrice
-        });
-
-        // Reduce the product's quantity
-        product.quantity -= quantity;
-        await product.save();
-
-        res.status(201).json({ message: "Order placed successfully", order: newOrder });
+        res.status(200).json({ message: "Product deleted successfully" });
     } catch (error) {
         res.status(500).json({ message: "Server error", error });
     }
 });
 
+
+// Route to place an order
+app.post('/orders', authenticateToken, async (req, res) => {
+    const { productId, quantity } = req.body;
+
+    console.log("Received Order Details:", req.body);
+
+    if (!quantity || isNaN(quantity) || quantity <= 0) {
+        return res.status(400).json({ message: "Invalid quantity" });
+    }
+
+    try {
+        const product = await Product.findByPk(productId);
+        if (!product) {
+            return res.status(404).json({ message: "Product not found" });
+        }
+        if (product.quantity < quantity) {
+            return res.status(400).json({ message: "Not enough product quantity available" });
+        }
+
+        const totalPrice = product.price * quantity;
+        const newOrder = await Order.create({
+            userId: req.user.id,
+            productId: product.id,
+            quantity,
+            totalPrice
+        });
+
+        product.quantity -= quantity;
+        await product.save();
+
+        res.status(201).json({ message: "Order placed successfully", order: newOrder });
+    } catch (error) {
+        console.error("Error while placing order:", error);
+        res.status(500).json({ message: "Server error", error });
+    }
+});
 
 // Route to get all orders for the logged-in buyer
 app.get('/my-orders', authenticateToken, async (req, res) => {
@@ -276,6 +297,80 @@ app.get('/my-orders', authenticateToken, async (req, res) => {
     }
 });
 
+// Route for farmers to view orders of their products
+app.get('/my-product-orders', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'farmer') {
+        return res.status(403).json({ message: "Only farmers can view orders for their products" });
+    }
+
+    try {
+        // Find all products that belong to the logged-in farmer
+        const farmerProducts = await Product.findAll({
+            where: { farmerId: req.user.id },
+            include: [Order] 
+        });
+
+        res.status(200).json(farmerProducts);
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error });
+    }
+});
+
+// Route for farmers to view a specific order by ID
+app.get('/orders/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+
+    if (req.user.role !== 'farmer') {
+        return res.status(403).json({ message: "Only farmers can view specific orders for their products" });
+    }
+
+    try {
+        // Find the order by ID
+        const order = await Order.findByPk(id, {
+            include: [Product] // Include product details
+        });
+
+        // Check if the product in the order belongs to the logged-in farmer
+        if (!order || order.Product.farmerId !== req.user.id) {
+            return res.status(403).json({ message: "You can only view orders for your own products" });
+        }
+
+        res.status(200).json(order);
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error });
+    }
+});
+
+// Route to cancel an order
+app.delete('/orders/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+
+    if (req.user.role !== 'buyer') {
+        return res.status(403).json({ message: "Only buyers can cancel their orders" });
+    }
+
+    try {
+        
+        const order = await Order.findByPk(id);
+
+        // Check if the order belongs to the logged-in buyer
+        if (!order || order.userId !== req.user.id) {
+            return res.status(403).json({ message: "You can only cancel your own orders" });
+        }
+
+        
+        const product = await Product.findByPk(order.productId);
+        product.quantity += order.quantity;
+        await product.save();
+
+        // Delete the order
+        await order.destroy();
+
+        res.status(200).json({ message: "Order cancelled successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Server error", error });
+    }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

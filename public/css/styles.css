@@ -6,7 +6,7 @@ body {
 }
 
 header {
-    background-color: #333;
+    background-color: #FF7F50;
     color: #fff;
     padding: 1rem;
     text-align: center;
@@ -38,8 +38,8 @@ label, input, select, textarea {
 }
 
 button {
-    background-color: #28a745;
-    color: white;
+    background-color: #66023c;
+    color: lightslategrey;
     padding: 0.75rem;
     border: none;
     width: 100%;
@@ -47,14 +47,14 @@ button {
 }
 
 button:hover {
-    background-color: #218838;
+    background-color: #66023c;
 }
 
 footer {
     text-align: center;
     padding: 1rem;
-    background-color: #333;
-    color: white;
+    background-color: #FF7F50;
+    color: lightslategray;
     position: absolute;
     bottom: 0;
     width: 100%;
